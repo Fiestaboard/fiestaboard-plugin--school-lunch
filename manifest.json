@@ -1,0 +1,251 @@
+{
+  "id": "school_lunch",
+  "name": "School Lunch Menu",
+  "version": "1.0.0",
+  "description": "Show today's (or tomorrow's) school lunch menu from Nutrislice",
+  "author": "FiestaBoard Team",
+  "repository": "https://github.com/Fiestaboard/fiestaboard-plugin--school-lunch",
+  "documentation": "README.md",
+  "icon": "utensils",
+  "category": "utility",
+  "min_refresh_seconds": 900,
+  "settings_schema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "title": "Enable School Lunch Menu",
+        "default": false
+      },
+      "district": {
+        "type": "string",
+        "title": "District Slug",
+        "description": "The subdomain of your district's Nutrislice site, e.g. 'cps' for https://cps.nutrislice.com"
+      },
+      "school": {
+        "type": "string",
+        "title": "School Slug",
+        "description": "The school segment of the Nutrislice menu URL, e.g. 'lincoln-elementary' for https://cps.nutrislice.com/menu/lincoln-elementary/lunch"
+      },
+      "menu_type": {
+        "type": "string",
+        "title": "Menu Type",
+        "description": "The last segment of the Nutrislice menu URL (usually 'lunch' or 'breakfast')",
+        "default": "lunch"
+      },
+      "timezone": {
+        "type": "string",
+        "title": "Timezone",
+        "description": "IANA timezone used to decide which day's menu to show",
+        "default": "America/Los_Angeles",
+        "ui:widget": "timezone"
+      },
+      "max_items": {
+        "type": "integer",
+        "title": "Max Items",
+        "description": "Maximum number of menu items to expose",
+        "default": 4,
+        "minimum": 1,
+        "maximum": 6
+      },
+      "show_tomorrow_after_hour": {
+        "type": "integer",
+        "title": "Show Tomorrow After Hour",
+        "description": "From this hour (0-23) show the next school day's menu instead of today's",
+        "default": 13,
+        "minimum": 0,
+        "maximum": 23
+      },
+      "refresh_seconds": {
+        "type": "integer",
+        "title": "Refresh Interval (seconds)",
+        "description": "How often to re-fetch the menu",
+        "default": 3600,
+        "minimum": 900,
+        "maximum": 86400
+      }
+    },
+    "required": [
+      "district",
+      "school"
+    ]
+  },
+  "env_vars": [
+    {
+      "name": "SCHOOL_LUNCH_ENABLED",
+      "required": false,
+      "description": "Enable the school lunch menu feature",
+      "default": "false"
+    }
+  ],
+  "variables": {
+    "groups": {
+      "day": {
+        "label": "Menu Day"
+      },
+      "menu": {
+        "label": "Menu"
+      }
+    },
+    "simple": {
+      "menu_date": {
+        "description": "Date of the menu being shown (e.g. 'Sep 16')",
+        "type": "string",
+        "group": "day",
+        "max_length": 6,
+        "example": "Sep 16"
+      },
+      "menu_weekday": {
+        "description": "Weekday of the menu being shown",
+        "type": "string",
+        "group": "day",
+        "max_length": 9,
+        "example": "Tuesday"
+      },
+      "is_today": {
+        "description": "Whether the menu shown is for today (false when showing tomorrow's)",
+        "type": "boolean",
+        "group": "day",
+        "max_length": 5,
+        "example": "true"
+      },
+      "headline": {
+        "description": "The first entree on the menu, truncated to 22 chars",
+        "type": "string",
+        "group": "menu",
+        "max_length": 22,
+        "example": "Classic Pepperoni Pizz"
+      },
+      "items_text": {
+        "description": "Menu item names joined with ', '",
+        "type": "string",
+        "group": "menu",
+        "max_length": 132,
+        "example": "Classic Pepperoni Pizza, Seasoned Peas, Pineapple Tidbits, Low Fat Milk"
+      },
+      "item_count": {
+        "description": "Number of menu items exposed",
+        "type": "number",
+        "group": "menu",
+        "max_length": 2,
+        "example": "4"
+      },
+      "no_school": {
+        "description": "Whether the day is marked as a no-school day",
+        "type": "boolean",
+        "group": "menu",
+        "max_length": 5,
+        "example": "false"
+      },
+      "no_school_text": {
+        "description": "The no-school notice from the menu (empty on school days)",
+        "type": "string",
+        "group": "menu",
+        "max_length": 22,
+        "example": "Labor Day"
+      }
+    },
+    "arrays": {
+      "items": {
+        "label_field": "name",
+        "item_fields": [
+          "name",
+          "section"
+        ]
+      }
+    }
+  },
+  "max_lengths": {
+    "menu_date": 6,
+    "menu_weekday": 9,
+    "headline": 22,
+    "items_text": 132,
+    "no_school_text": 22,
+    "items.*.name": 40,
+    "items.*.section": 30
+  },
+  "fiestaboard_version": ">=2.10.0",
+  "teaser": "{66}LUNCH: PIZZA",
+  "previews": [
+    {
+      "device_type": "flagship",
+      "rows": [
+        "LUNCH TUE SEP 16",
+        "PEPPERONI PIZZA",
+        "SEASONED PEAS",
+        "PINEAPPLE TIDBITS",
+        "FRESH ORANGE",
+        "LOW FAT MILK"
+      ]
+    },
+    {
+      "device_type": "note",
+      "rows": [
+        "{66} TUE SEP 16",
+        "PEPPERONI PIZZA",
+        "SEASONED PEAS"
+      ]
+    }
+  ],
+  "demo": {
+    "flagship": {
+      "name": "School Lunch Demo",
+      "template": [
+        "LUNCH {{school_lunch.menu_weekday}} {{school_lunch.menu_date}}",
+        "{{school_lunch.items.0.name}}",
+        "{{school_lunch.items.1.name}}",
+        "{{school_lunch.items.2.name}}",
+        "{{school_lunch.items.3.name}}",
+        ""
+      ],
+      "line_metadata": [
+        {
+          "alignment": "left",
+          "wrap": false
+        },
+        {
+          "alignment": "left",
+          "wrap": false
+        },
+        {
+          "alignment": "left",
+          "wrap": false
+        },
+        {
+          "alignment": "left",
+          "wrap": false
+        },
+        {
+          "alignment": "left",
+          "wrap": false
+        },
+        {
+          "alignment": "left",
+          "wrap": false
+        }
+      ]
+    },
+    "note": {
+      "name": "School Lunch (Note)",
+      "template": [
+        "{{school_lunch.menu_date}}",
+        "{{school_lunch.headline}}",
+        "{{school_lunch.items.1.name}}"
+      ],
+      "line_metadata": [
+        {
+          "alignment": "left",
+          "wrap": false
+        },
+        {
+          "alignment": "left",
+          "wrap": false
+        },
+        {
+          "alignment": "left",
+          "wrap": false
+        }
+      ]
+    }
+  }
+}
