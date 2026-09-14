@@ -187,6 +187,14 @@
       ]
     }
   ],
+  "screenshots": [
+    {
+      "src": "docs/board-display.png",
+      "alt": "School Lunch Menu displayed on a Vestaboard",
+      "caption": "Show today's (or tomorrow's) school lunch menu from Nutrislice",
+      "primary": true
+    }
+  ],
   "demo": {
     "flagship": {
       "name": "School Lunch Demo",

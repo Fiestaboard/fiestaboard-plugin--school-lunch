@@ -8,6 +8,8 @@ Display your school's lunch menu from [Nutrislice](https://www.nutrislice.com/),
 
 The School Lunch Menu plugin fetches the published week's menu from your district's Nutrislice site and shows the next school day's items on your board. After a configurable hour it rolls over to the next day, so the board stops advertising a lunch that has already been served. Weekends and days with no published menu are skipped automatically (up to a week ahead), and no-school days are surfaced as their own message.
 
+![School Lunch Menu Display](./docs/board-display.png)
+
 No API key is required.
 
 ## Template Variables
