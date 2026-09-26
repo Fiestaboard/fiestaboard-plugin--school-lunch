@@ -1,7 +1,7 @@
 {
   "id": "school_lunch",
   "name": "School Lunch Menu",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Show today's (or tomorrow's) school lunch menu from Nutrislice",
   "author": "FiestaBoard Team",
   "repository": "https://github.com/Fiestaboard/fiestaboard-plugin--school-lunch",
@@ -43,10 +43,10 @@
       "max_items": {
         "type": "integer",
         "title": "Max Items",
-        "description": "Maximum number of menu items to expose",
-        "default": 4,
+        "description": "Maximum number of menu items to expose. Automatically capped to however many rows the board has room for; lower this to show fewer items even on a large panel.",
+        "default": 23,
         "minimum": 1,
-        "maximum": 6
+        "maximum": 23
       },
       "show_tomorrow_after_hour": {
         "type": "integer",
@@ -110,11 +110,11 @@
         "example": "true"
       },
       "headline": {
-        "description": "The first entree on the menu, truncated to 22 chars",
+        "description": "The first entree on the menu, truncated to fit the board (up to 40 tiles)",
         "type": "string",
         "group": "menu",
-        "max_length": 22,
-        "example": "Classic Pepperoni Pizz"
+        "max_length": 40,
+        "example": "Classic Pepperoni Pizza"
       },
       "items_text": {
         "description": "Menu item names joined with ', '",
@@ -141,7 +141,7 @@
         "description": "The no-school notice from the menu (empty on school days)",
         "type": "string",
         "group": "menu",
-        "max_length": 22,
+        "max_length": 40,
         "example": "Labor Day"
       }
     },
@@ -158,9 +158,9 @@
   "max_lengths": {
     "menu_date": 6,
     "menu_weekday": 9,
-    "headline": 22,
+    "headline": 40,
     "items_text": 132,
-    "no_school_text": 22,
+    "no_school_text": 40,
     "items.*.name": 40,
     "items.*.section": 30
   },
@@ -184,6 +184,23 @@
         "{66} TUE SEP 16",
         "PEPPERONI PIZZA",
         "SEASONED PEAS"
+      ]
+    },
+    {
+      "label": "Note Array (2 wide x 3 tall)",
+      "device_type": "note_array",
+      "notes_wide": 2,
+      "notes_tall": 3,
+      "rows": [
+        "LUNCH TUE SEP 16",
+        "PEPPERONI PIZZA",
+        "SEASONED PEAS",
+        "PINEAPPLE TIDBITS",
+        "FRESH ORANGE",
+        "LOW FAT MILK",
+        "DINNER ROLL",
+        "GARDEN SALAD",
+        "CHOCOLATE MILK"
       ]
     }
   ],
