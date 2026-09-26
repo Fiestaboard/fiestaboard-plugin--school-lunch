@@ -7,6 +7,8 @@ import pytest
 import pytz
 import requests
 
+from src.devices import MAX_NOTES_PER_AXIS, NOTE_ROWS, BoardContext
+
 from plugins.school_lunch import SchoolLunchPlugin
 
 
@@ -411,3 +413,55 @@ class TestFormattedDisplay:
         assert all(len(line) <= 15 for line in lines)
         # "LUNCH MON SEP 14" is 16 tiles, so the menu type is dropped
         assert lines[0] == "MON SEP 14"
+
+
+class TestItemsCapacity:
+    """Direct pin for the F1 bug: item count must derive from board.rows,
+    not be a constant (the old fixed 1-6 max_items cap).
+
+    The shared geometry_conformance suite's strict_growth check cannot
+    reliably catch a regression here: a fixed cap between the smallest and
+    largest board's capacity does not saturate any single rung of the
+    growth ladder, so "capped independently of the board" and "the day just
+    had fewer than N items" render identically from outside the plugin (see
+    PR discussion). This plugin is the only place that knows how much
+    content was actually available, so it has to pin the capacity function
+    itself rather than a rendered row count.
+    """
+
+    def test_capacity_at_the_largest_board_matches_the_platform_ceiling(self):
+        """The largest board is a full MAX_NOTES_PER_AXIS x MAX_NOTES_PER_AXIS
+        note array; one row of it is always spent on the header, so its item
+        capacity must be exactly (MAX_NOTES_PER_AXIS * NOTE_ROWS) - 1.
+
+        Asserted against the platform's own constants, not a literal 23, so
+        this keeps tracking core if MAX_NOTES_PER_AXIS or NOTE_ROWS ever
+        change, instead of silently going stale.
+        """
+        plugin = make_plugin()
+        largest_board = BoardContext(
+            device_type="note_array",
+            rows=MAX_NOTES_PER_AXIS * NOTE_ROWS,
+            cols=MAX_NOTES_PER_AXIS * 15,
+        )
+
+        assert plugin._items_capacity(largest_board) == MAX_NOTES_PER_AXIS * NOTE_ROWS - 1
+
+    def test_capacity_is_not_a_constant(self):
+        """The capacity must actually vary with board.rows -- a plugin that
+        hardcodes any single number (6, 23, or otherwise) passes a test that
+        only checks one geometry. Pin that it differs between two boards of
+        different heights."""
+        plugin = make_plugin()
+        flagship = BoardContext.from_device_type("flagship")
+        largest_board = BoardContext(
+            device_type="note_array",
+            rows=MAX_NOTES_PER_AXIS * NOTE_ROWS,
+            cols=MAX_NOTES_PER_AXIS * 15,
+        )
+
+        flagship_capacity = plugin._items_capacity(flagship)
+        largest_capacity = plugin._items_capacity(largest_board)
+
+        assert flagship_capacity == flagship.rows - 1
+        assert largest_capacity > flagship_capacity

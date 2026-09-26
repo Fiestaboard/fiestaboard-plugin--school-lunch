@@ -11,6 +11,7 @@ import logging
 import pytz
 import requests
 
+from src.devices import BoardContext
 from src.plugins.base import PluginBase, PluginResult
 
 logger = logging.getLogger(__name__)
@@ -22,8 +23,28 @@ API_URL = (
 USER_AGENT = "FiestaBoard (https://github.com/FiestaBoard/FiestaBoard)"
 DEFAULT_TIMEZONE = "America/Los_Angeles"
 LOOK_AHEAD_DAYS = 7
-HEADLINE_MAX = 22
+
+# One row is spent on the "LUNCH TUE SEP 16"-style header in the whole-board
+# render; every other row is available for menu items. Item count is derived
+# from this, never fixed, so a taller board shows more items.
+HEADER_ROWS = 1
+
+# Ceiling for single-line text fields (headline, no_school_text, an item's own
+# name). Independent of board width above this point: an entree name has no
+# reason to grow past a normal food-name length just because the board is
+# 120 tiles wide. Below it, still bounded by the board so it never overflows
+# a Note or a narrow array unit.
+TEXT_FIELD_MAX = 40
+SECTION_MAX = 30
 ITEMS_TEXT_MAX = 132
+
+# Default and ceiling for the "max_items" setting. The ceiling matches the
+# largest board FiestaBoard supports (a 120x24 note array) minus its header
+# row, so raising the setting to its maximum always lets a large panel use
+# every row it has. The default equals the ceiling too: by default the board
+# itself is what limits item count (via _items_capacity), and a user who
+# wants fewer items even on a big panel can lower this setting explicitly.
+MAX_ITEMS_CEILING = 23
 
 
 def _validate_slug(value: Any, label: str) -> List[str]:
@@ -94,6 +115,20 @@ class SchoolLunchPlugin(PluginBase):
         """Current time in the configured timezone (overridable in tests)."""
         return datetime.now(pytz.timezone(self.config.get("timezone") or DEFAULT_TIMEZONE))
 
+    def _effective_board(self) -> BoardContext:
+        """The board to size output for: ``self.board``, or a Flagship default.
+
+        ``self.board`` is ``None`` outside a board-scoped render (unit tests,
+        legacy callers); treating that as a Flagship keeps those callers
+        working without crashing while still deriving every dimension from a
+        real ``BoardContext`` instead of a hardcoded tuple.
+        """
+        return self.board or BoardContext.from_device_type("flagship")
+
+    def _items_capacity(self, board: BoardContext) -> int:
+        """How many item rows fit on *board* once the header row is spent."""
+        return max(board.rows - HEADER_ROWS, 1)
+
     def fetch_data(self) -> PluginResult:
         """Fetch the menu for the next school day with published items."""
         district = self.config.get("district", "")
@@ -107,7 +142,8 @@ class SchoolLunchPlugin(PluginBase):
                     error=f"No {menu_type} menu published for the next {LOOK_AHEAD_DAYS} days",
                 )
             menu_day, parsed = picked
-            return PluginResult(available=True, data=self._build_data(menu_day, parsed, now.date()))
+            data = self._build_data(menu_day, parsed, now.date())
+            return PluginResult(available=True, data=data, formatted_lines=self._render_lines(data))
 
         except requests.ConnectionError:
             return PluginResult(
@@ -162,34 +198,56 @@ class SchoolLunchPlugin(PluginBase):
         return {d["date"]: d for d in week.get("days") or [] if isinstance(d, dict) and d.get("date")}
 
     def _build_data(self, menu_day: date, parsed: Dict[str, Any], today: date) -> Dict[str, Any]:
-        """Build the template variable dict for the chosen day."""
-        max_items = int(self.config.get("max_items", 4))
+        """Build the template variable dict for the chosen day.
+
+        The item count is derived from the board's own row capacity, capped
+        by the user's ``max_items`` setting -- never the other way around --
+        so a large panel shows more items by default, and a user can only
+        ask for *fewer* than the board can hold, never be stuck at a fixed
+        number regardless of board size.
+        """
+        board = self._effective_board()
+        capacity = self._items_capacity(board)
+        configured_max = int(self.config.get("max_items", MAX_ITEMS_CEILING))
+        max_items = min(configured_max, capacity) if configured_max > 0 else capacity
+
         all_items = parsed["items"]
         entree = next((i for i in all_items if i["category"] == "entree"), None)
         if entree is None and all_items:
             entree = all_items[0]
         items = all_items[:max_items]
 
+        # Single-line text fields reflow with the board (more cols -> more
+        # room) but never exceed TEXT_FIELD_MAX/SECTION_MAX -- the manifest's
+        # honest ceiling for what these fields can ever emit.
+        headline_max = min(board.cols, TEXT_FIELD_MAX)
+        no_school_max = min(board.cols, TEXT_FIELD_MAX)
+
         return {
             "menu_date": f"{menu_day:%b} {menu_day.day}",
             "menu_weekday": f"{menu_day:%A}",
             "is_today": "true" if menu_day == today else "false",
-            "headline": entree["name"][:HEADLINE_MAX] if entree else "",
+            "headline": entree["name"][:headline_max] if entree else "",
             "items_text": ", ".join(i["name"] for i in items)[:ITEMS_TEXT_MAX],
             "item_count": str(len(items)),
             "no_school": "true" if parsed["no_school"] else "false",
-            "no_school_text": parsed["no_school_text"],
-            "items": [{"name": i["name"], "section": i["section"]} for i in items],
+            "no_school_text": parsed["no_school_text"][:no_school_max],
+            "items": [
+                {"name": i["name"][:TEXT_FIELD_MAX], "section": i["section"][:SECTION_MAX]} for i in items
+            ],
         }
 
-    def get_formatted_display(self) -> Optional[List[str]]:
-        """Default display: 'LUNCH TUE SEP 16' then item names (or NO SCHOOL)."""
-        result = self.get_data()
-        if not result.available or not result.data:
-            return None
+    def _render_lines(self, data: Dict[str, Any]) -> List[str]:
+        """Render whole-board display lines for *data*, sized to ``self.board``.
 
-        rows, cols = (self.board.rows, self.board.cols) if self.board else (6, 22)
-        data = result.data
+        Shared by :meth:`fetch_data` (the live path -- ``PluginResult.formatted_lines``,
+        consumed by ``src/displays/service.py``) and :meth:`get_formatted_display`
+        (the documented-but-dead hook) so both stay in sync and both are
+        board-aware. ``data["items"]`` is already capped to the board's row
+        capacity by :meth:`_build_data`, so no content is dropped here.
+        """
+        board = self._effective_board()
+        rows, cols = board.rows, board.cols
         menu_type = self.config.get("menu_type") or "lunch"
 
         header = f"{menu_type} {data['menu_weekday'][:3]} {data['menu_date']}".upper()
@@ -208,6 +266,18 @@ class SchoolLunchPlugin(PluginBase):
         while len(lines) < rows:
             lines.append("")
         return lines
+
+    def get_formatted_display(self) -> Optional[List[str]]:
+        """Default display: 'LUNCH TUE SEP 16' then item names (or NO SCHOOL)."""
+        # Forward self.board explicitly: get_data(board=None) would rebind
+        # self.board to None for the duration of the nested fetch, which
+        # would make _build_data derive item count from a Flagship even when
+        # this call is itself running inside a real bound board (see
+        # PluginBase._bound_board / get_data's own docstring on binding).
+        result = self.get_data(self.board)
+        if not result.available or not result.data:
+            return None
+        return self._render_lines(result.data)
 
 
 # Export the plugin class
